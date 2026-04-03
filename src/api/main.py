@@ -167,7 +167,7 @@ def run_pipeline(video_path: str) -> dict:
         warnings.append("Signal quality is moderate. Results may have reduced accuracy.")
 
     return {
-        "bpm": signal_result.bpm,
+        "bpm": round(hrv_result.mean_hr, 1) if hrv_result is not None else signal_result.bpm,
         "sqi_score": signal_result.sqi_score,
         "sqi_level": signal_result.sqi_level,
         "per_roi_sqi": signal_result.per_roi_sqi,
