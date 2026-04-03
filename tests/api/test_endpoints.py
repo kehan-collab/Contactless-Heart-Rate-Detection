@@ -7,6 +7,7 @@ Uses httpx.AsyncClient against the app instance (no live server needed).
 
 import pytest
 from fastapi.testclient import TestClient
+
 from src.api.main import app
 
 

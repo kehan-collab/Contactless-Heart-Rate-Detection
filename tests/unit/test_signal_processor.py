@@ -5,7 +5,6 @@ Validates bandpass filtering, POS algorithm, CHROM algorithm, and
 BPM extraction using synthetic signals with known cardiac frequencies.
 """
 
-import numpy as np
 import pytest
 
 

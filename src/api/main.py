@@ -8,7 +8,6 @@ See docs/modules/06_api_server.md for implementation details.
 """
 
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(
     title="PulseGuard API",

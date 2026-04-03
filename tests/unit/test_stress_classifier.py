@@ -6,6 +6,7 @@ profiles representing low, moderate, and high stress states.
 """
 
 import pytest
+
 from src.models import HRVResult
 
 

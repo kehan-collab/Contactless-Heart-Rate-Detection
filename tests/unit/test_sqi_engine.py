@@ -6,7 +6,6 @@ quality and noise-dominated signals as LOW quality, and that the
 output suppression logic triggers appropriately.
 """
 
-import numpy as np
 import pytest
 
 

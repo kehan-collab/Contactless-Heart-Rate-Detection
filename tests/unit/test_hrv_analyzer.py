@@ -6,7 +6,6 @@ frequency-domain metrics using synthetic inter-beat interval arrays
 with known statistical properties.
 """
 
-import numpy as np
 import pytest
 
 

@@ -7,7 +7,6 @@ a real video file are marked with pytest.mark.slow and skipped in
 fast CI runs.
 """
 
-import numpy as np
 import pytest
 
 
