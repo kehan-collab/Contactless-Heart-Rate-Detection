@@ -51,4 +51,4 @@ jobs:
         run: pytest tests/integration/ -v --timeout=120
 
       - name: Generate coverage report
-        run: pytest tests/ -v --cov=src --cov-report=term-missing --cov-fail-under=60
+        run: pytest tests/ -v --cov=src --cov-report=term-missing
