@@ -107,19 +107,21 @@ export default function ResultsScreen({ navigation, route }) {
           )}
         </View>
 
-        {/* BPM Card — only in biometric mode */}
-        {!isVisualMode && (
-          <View style={styles.bpmCard}>
-            <Text style={styles.bpmValue}>
-              {result.bpm != null ? Math.round(result.bpm) : '--'}
-            </Text>
-            <Text style={styles.bpmLabel}>BPM</Text>
-            <View style={styles.sqiRow}>
-              <View style={[styles.sqiDot, { backgroundColor: sqiColor }]} />
-              <Text style={styles.sqiText}>Signal: {result.sqi_level} ({Math.round((result.sqi_score || 0) * 100)}%)</Text>
-            </View>
+        {/* BPM Card */}
+        <View style={[styles.bpmCard, isVisualMode && { opacity: 0.7 }]}>
+          <Text style={[styles.bpmValue, isVisualMode && { color: colors.textMuted }]}>
+            {!isVisualMode && result.bpm != null ? Math.round(result.bpm) : '--'}
+          </Text>
+          <Text style={styles.bpmLabel}>BPM</Text>
+          <View style={styles.sqiRow}>
+            <View style={[styles.sqiDot, { backgroundColor: isVisualMode ? colors.textMuted : sqiColor }]} />
+            {isVisualMode ? (
+               <Text style={styles.sqiText}>Biometrics unavailable</Text>
+            ) : (
+               <Text style={styles.sqiText}>Signal: {result.sqi_level} ({Math.round((result.sqi_score || 0) * 100)}%)</Text>
+            )}
           </View>
-        )}
+        </View>
 
         {/* Visual Assessment Card — TWIST 1 (Gemini Vision) */}
         {isVisualMode && visual && (
@@ -169,13 +171,6 @@ export default function ResultsScreen({ navigation, route }) {
               <Text style={styles.visualAssessment}>{visual.overall_assessment}</Text>
             ) : null}
 
-            {/* Recommendation */}
-            {visual.recommended_action ? (
-              <View style={styles.vmRecommend}>
-                <Text style={styles.vmRecommendLabel}>Recommendation</Text>
-                <Text style={styles.vmRecommendText}>{visual.recommended_action}</Text>
-              </View>
-            ) : null}
 
             {/* 5 Clinical Indicators */}
             <Text style={[styles.sectionTitle, { marginTop: 8 }]}>CLINICAL INDICATORS</Text>
@@ -192,7 +187,7 @@ export default function ResultsScreen({ navigation, route }) {
             </View>
 
             {/* Wellness Tips */}
-            {visual.wellness_tips && visual.wellness_tips.length > 0 && (
+            {Array.isArray(visual.wellness_tips) && visual.wellness_tips.length > 0 && (
               <View style={styles.tipsSection}>
                 <Text style={[styles.sectionTitle, { marginBottom: 8 }]}>WELLNESS RECOMMENDATIONS</Text>
                 {visual.wellness_tips.map((tip, i) => (
@@ -206,7 +201,7 @@ export default function ResultsScreen({ navigation, route }) {
           </View>
         )}
 
-        {/* Waveform */}
+        {/* Waveform (hide if visual mode to save space) */}
         {!isVisualMode && sampled.length > 5 && (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>BVP WAVEFORM</Text>
@@ -234,9 +229,8 @@ export default function ResultsScreen({ navigation, route }) {
         )}
 
         {/* HRV Grid */}
-        {!isVisualMode && result.hrv && (
-          <>
-            <Text style={styles.sectionTitle}>HRV METRICS</Text>
+        <Text style={styles.sectionTitle}>HRV METRICS</Text>
+        {!isVisualMode && result.hrv ? (
             <View style={styles.grid}>
               <MetricCard label="RMSSD" value={result.hrv.rmssd} unit="ms" />
               <MetricCard label="SDNN" value={result.hrv.sdnn} unit="ms" />
@@ -244,12 +238,11 @@ export default function ResultsScreen({ navigation, route }) {
               <MetricCard label="LF / HF" value={result.hrv.lf_hf_ratio} unit="" />
               <MetricCard label="Mean HR" value={result.hrv.mean_hr} unit="BPM" />
             </View>
-          </>
-        )}
-
-        {!isVisualMode && !result.hrv && (
+        ) : (
           <View style={styles.card}>
-            <Text style={styles.noData}>HRV data not available — signal quality may be insufficient</Text>
+            <Text style={styles.noData}>
+              {isVisualMode ? "Biometric extraction disabled during Visual Assessment Mode" : "HRV data not available — signal quality may be insufficient"}
+            </Text>
           </View>
         )}
 
