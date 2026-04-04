@@ -1,9 +1,34 @@
 /**
  * Smart Triage — combines BPM + HRV + Stress into one verdict
+ * Also handles Visual Assessment mode from Gemini AI
  */
 export function computeTriage(result) {
   if (!result) return { level: 'UNKNOWN', action: 'No data', details: [] };
 
+  // --- Visual Assessment Mode triage ---
+  if (result.active_mode === 'visual_assessment' && result.visual_assessment) {
+    const va = result.visual_assessment;
+    const score = va.visual_stress_score || 0;
+    const urgency = va.urgency || '';
+    const details = [];
+
+    if (va.overall_assessment) details.push(va.overall_assessment);
+    if (va.recommended_action) details.push(va.recommended_action);
+
+    // Map urgency/score to triage level
+    if (urgency === 'CRITICAL' || urgency === 'HIGH' || score >= 7) {
+      return { level: 'CRITICAL', action: 'Immediate medical attention recommended',
+        details: details.length ? details : ['High visual distress indicators detected'] };
+    }
+    if (urgency === 'MODERATE' || score >= 4) {
+      return { level: 'ELEVATED', action: 'Monitor closely — some distress signs detected',
+        details: details.length ? details : ['Moderate visual distress indicators present'] };
+    }
+    return { level: 'STABLE', action: 'No visual signs of distress detected',
+      details: details.length ? details : ['Patient appears calm and healthy'] };
+  }
+
+  // --- Biometric Mode triage ---
   const { bpm, stress_level, hrv, sqi_level } = result;
 
   if (sqi_level === 'LOW') {
