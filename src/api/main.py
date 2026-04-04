@@ -382,7 +382,8 @@ def run_finger_pipeline(video_path: str) -> dict:
     # --- Stage 2: Signal processing ---
     try:
         from scipy.signal import detrend
-        from src.signal_processor import bandpass_filter, extract_bpm, detect_peaks
+
+        from src.signal_processor import bandpass_filter, detect_peaks, extract_bpm
 
         # Detrend and bandpass filter
         red_detrended = detrend(red, type='linear')
