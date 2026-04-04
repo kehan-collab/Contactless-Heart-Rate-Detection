@@ -93,6 +93,57 @@ export default function HomeScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
+          {/* Emergency Dashboard */}
+          {mode === 'emergency' && (
+            <View style={styles.emergencyDash}>
+              <View style={styles.emergencyHeader}>
+                <View style={styles.emergencyDot} />
+                <Text style={styles.emergencyTitle}>Emergency Triage Mode</Text>
+              </View>
+              <Text style={styles.emergencyDesc}>
+                Rapid assessment for disaster, accident, or paramedic scenarios. Results prioritize triage classification.
+              </Text>
+              <View style={styles.emergencyRow}>
+                <View style={styles.emergencyChip}>
+                  <Text style={styles.chipLabel}>Quick Scan</Text>
+                  <Text style={styles.chipValue}>15s</Text>
+                </View>
+                <View style={styles.emergencyChip}>
+                  <Text style={styles.chipLabel}>Triage</Text>
+                  <Text style={styles.chipValue}>Auto</Text>
+                </View>
+                <View style={styles.emergencyChip}>
+                  <Text style={styles.chipLabel}>Fallback</Text>
+                  <Text style={styles.chipValue}>AI Visual</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Wellness Dashboard */}
+          {mode === 'wellness' && (
+            <View style={styles.wellnessDash}>
+              <Text style={styles.wellnessTitle}>Daily Wellness Check</Text>
+              <Text style={styles.wellnessDesc}>
+                Track your heart rate, HRV, and stress levels over time. Regular monitoring helps identify patterns.
+              </Text>
+              <View style={styles.wellnessRow}>
+                <View style={styles.wellnessChip}>
+                  <Text style={styles.wChipLabel}>Stress</Text>
+                  <Text style={styles.wChipValue}>Track</Text>
+                </View>
+                <View style={styles.wellnessChip}>
+                  <Text style={styles.wChipLabel}>HRV</Text>
+                  <Text style={styles.wChipValue}>Insights</Text>
+                </View>
+                <View style={styles.wellnessChip}>
+                  <Text style={styles.wChipLabel}>History</Text>
+                  <Text style={styles.wChipValue}>Trends</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
           <View style={styles.divider} />
 
           <Text style={styles.sectionLabel}>CHOOSE METHOD</Text>
@@ -105,7 +156,7 @@ export default function HomeScreen({ navigation }) {
             </View>
             <View style={styles.cardBody}>
               <Text style={styles.cardTitle}>Finger Scan</Text>
-              <Text style={styles.cardDesc}>Cover the flashlight with your fingertip</Text>
+              <Text style={styles.cardDesc}>Place finger on rear camera lens</Text>
             </View>
             <Text style={styles.cardArrow}>›</Text>
           </TouchableOpacity>
@@ -140,6 +191,19 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.cardArrow}>›</Text>
           </TouchableOpacity>
 
+          {/* Manual Visual Assessment — TWIST 1 */}
+          <TouchableOpacity style={[styles.card, { borderColor: colors.borderPurple }]}
+            onPress={() => navigation.navigate('Camera', { mode, forceVisual: true })} activeOpacity={0.85}>
+            <View style={styles.cardIcon}>
+              <View style={styles.iconCirclePurple}><Text style={styles.iconText}>V</Text></View>
+            </View>
+            <View style={styles.cardBody}>
+              <Text style={styles.cardTitle}>Visual Assessment</Text>
+              <Text style={styles.cardDesc}>AI-powered distress analysis (manual fallback)</Text>
+            </View>
+            <Text style={styles.cardArrow}>›</Text>
+          </TouchableOpacity>
+
           {/* Triage Legend */}
           <View style={styles.legendCard}>
             <Text style={styles.legendTitle}>Smart Triage System</Text>
@@ -168,6 +232,16 @@ export default function HomeScreen({ navigation }) {
           </View>
 
           {/* Past Results */}
+          <View style={styles.infoCard}>
+            <Text style={styles.infoTitle}>When does Visual Assessment activate?</Text>
+            <Text style={styles.infoText}>
+              Automatic: When signal quality drops too low (movement, poor lighting), the Triage Agent switches to Gemini AI visual analysis.
+            </Text>
+            <Text style={[styles.infoText, { marginTop: 4 }]}>
+              Manual: Tap the Visual Assessment card above to trigger it directly for emergency triage.
+            </Text>
+          </View>
+
           {history.length > 0 && (
             <View>
               <Text style={styles.sectionLabel}>RECENT RESULTS</Text>
@@ -235,6 +309,30 @@ const styles = StyleSheet.create({
   modeLblActiveR: { color: colors.statusRed },
   modeSub: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
 
+  // Emergency dashboard
+  emergencyDash: { backgroundColor: 'rgba(229,57,53,0.06)', borderRadius: 18, padding: 18, marginBottom: 16,
+    borderWidth: 1.5, borderColor: 'rgba(229,57,53,0.15)' },
+  emergencyHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  emergencyDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.statusRed, marginRight: 10 },
+  emergencyTitle: { fontSize: 16, fontWeight: '800', color: colors.statusRed },
+  emergencyDesc: { fontSize: 12, color: colors.textSecondary, lineHeight: 17, marginBottom: 12 },
+  emergencyRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  emergencyChip: { flex: 1, backgroundColor: 'rgba(229,57,53,0.08)', borderRadius: 12, padding: 10,
+    alignItems: 'center', marginHorizontal: 3, borderWidth: 1, borderColor: 'rgba(229,57,53,0.12)' },
+  chipLabel: { fontSize: 10, fontWeight: '600', color: colors.statusRed, textTransform: 'uppercase', letterSpacing: 0.5 },
+  chipValue: { fontSize: 15, fontWeight: '800', color: colors.statusRed, marginTop: 2 },
+
+  // Wellness dashboard
+  wellnessDash: { backgroundColor: 'rgba(46,125,50,0.04)', borderRadius: 18, padding: 18, marginBottom: 16,
+    borderWidth: 1.5, borderColor: colors.borderGreen },
+  wellnessTitle: { fontSize: 16, fontWeight: '800', color: colors.green, marginBottom: 6 },
+  wellnessDesc: { fontSize: 12, color: colors.textSecondary, lineHeight: 17, marginBottom: 12 },
+  wellnessRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  wellnessChip: { flex: 1, backgroundColor: 'rgba(46,125,50,0.06)', borderRadius: 12, padding: 10,
+    alignItems: 'center', marginHorizontal: 3, borderWidth: 1, borderColor: colors.borderGreen },
+  wChipLabel: { fontSize: 10, fontWeight: '600', color: colors.green, textTransform: 'uppercase', letterSpacing: 0.5 },
+  wChipValue: { fontSize: 15, fontWeight: '800', color: colors.green, marginTop: 2 },
+
   divider: { width: width * 0.4, height: 1.5, backgroundColor: colors.border,
     borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
   dividerSmall: { height: 1, backgroundColor: colors.border },
@@ -268,6 +366,12 @@ const styles = StyleSheet.create({
   legendRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
   legendDot: { width: 8, height: 8, borderRadius: 4, marginRight: 10 },
   legendText: { fontSize: 12, color: colors.textSecondary },
+
+  // Info card
+  infoCard: { backgroundColor: 'rgba(126,87,194,0.04)', borderRadius: 14, padding: 14, marginBottom: 16,
+    borderWidth: 1, borderColor: colors.borderPurple },
+  infoTitle: { fontSize: 12, fontWeight: '700', color: colors.purple, marginBottom: 6 },
+  infoText: { fontSize: 11, color: colors.textSecondary, lineHeight: 16 },
 
   // History
   historyRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.white,
