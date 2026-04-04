@@ -210,7 +210,7 @@ class TestRunPipeline:
             result = run_pipeline("/fake/path.mp4")
 
         assert result["bpm"] is None
-        assert "No face detected" in result["warnings"][0]
+        assert "no face detected" in result["warnings"][0]
 
 
 # ---------------------------------------------------------------------------

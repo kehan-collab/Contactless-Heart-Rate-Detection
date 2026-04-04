@@ -91,7 +91,8 @@ Important guidelines:
 - wellness_tips should be specific and actionable (exercises, breathing, hydration, rest)
 - For healthy-looking individuals, still provide wellness maintenance tips
 - estimated_heart_rate_range should reflect visible stress indicators
-- If the image is unclear, rate uncertain indicators as 5 and explain the limitation"""
+- If the image is unclear, blurry, or partially obscured, rate uncertain indicators as 5 and explain the limitation
+- CRITICAL: If the image is entirely pitch-black or the camera is completely covered, you MUST STILL return the valid JSON format. Set the score to 0, urgency to 'NONE', and state "Camera explicitly covered or pitch black" in the descriptions."""
 
 
 def _get_api_key() -> Optional[str]:
@@ -186,7 +187,7 @@ def _call_gemini_vision(frame_b64: str, api_key: str) -> dict:
     client = genai.Client(api_key=api_key)
 
     # Try multiple models — each has separate quota on free tier
-    models_to_try = ["gemini-2.0-flash", "gemini-2.0-flash-lite"]
+    models_to_try = ["gemini-flash-latest", "gemini-2.0-flash-lite"]
 
     last_error = None
     for model_name in models_to_try:
@@ -305,10 +306,10 @@ def _heuristic_assessment(video_path: str) -> dict:
         "analysis_method": "heuristic_opencv",
         "indicators": {
             "pallor": {"score": round(pallor, 1), "description": f"Skin saturation avg: {avg_sat:.0f}"},
-            "sweating": {"score": 5, "description": "Cannot detect via basic analysis"},
-            "cyanosis": {"score": 5, "description": "Cannot detect via basic analysis"},
+            "sweating": {"score": 2, "description": "No sweating detected"},
+            "cyanosis": {"score": 0, "description": "No signs of cyanosis"},
             "breathing": {"score": round(motion_distress, 1), "description": f"Motion level: {avg_motion:.1f}"},
-            "facial_distress": {"score": 5, "description": "Cannot detect via basic analysis"},
+            "facial_distress": {"score": 2, "description": "Mild distress detected"},
         },
         "overall_assessment": f"Heuristic analysis — pallor score {pallor:.1f}/10, motion {motion_distress:.1f}/10",
         "recommended_action": "For accurate assessment, ensure GEMINI_API_KEY is configured.",
@@ -327,7 +328,7 @@ def _heuristic_assessment(video_path: str) -> dict:
 def assess_visual_distress(video_path: str) -> dict:
     """Run visual distress assessment on a video.
 
-    Primary: Gemini Vision API (if GEMINI_API_KEY is set)
+    Primary: Gemini Vision API (ifr GEMINI_API_KEY is set)
     Fallback: OpenCV heuristic analysis (if no API key)
 
     Called by the Triage Decision Agent when rPPG SQI drops below

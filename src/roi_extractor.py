@@ -320,6 +320,7 @@ def extract_rois(video_path, model_path=None):
     rgb_buffers = [[] for _ in ROI_DEFINITIONS]
     landmarks_list = []
     frame_count = 0
+    processed_count = 0
     face_frame_count = 0
     patient_moved = False
 
@@ -339,6 +340,7 @@ def extract_rois(video_path, model_path=None):
 
         timestamp_ms = (frame_count / fps) * 1000.0
         frame_count += 1
+        processed_count += 1
 
         green_vals, rgb_vals, lm_coords = _process_frame(
             landmarker, frame, frame_w, frame_h, timestamp_ms=timestamp_ms
@@ -366,7 +368,7 @@ def extract_rois(video_path, model_path=None):
     if patient_moved:
         warnings.append("During analysis patient movements out of circle observed, we recommend testing again to get accurate outcome")
 
-    if frame_count == 0 or face_frame_count == 0:
+    if processed_count == 0 or face_frame_count == 0:
         return ROIResult(
             green_signals=[[], [], []],
             face_detected=False,
@@ -377,7 +379,7 @@ def extract_rois(video_path, model_path=None):
             warnings=warnings,
         )
 
-    detection_ratio = face_frame_count / frame_count
+    detection_ratio = face_frame_count / processed_count
 
     if detection_ratio < 0.3:
         return ROIResult(
