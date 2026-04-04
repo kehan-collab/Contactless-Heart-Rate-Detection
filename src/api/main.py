@@ -180,7 +180,7 @@ def _run_analysis_on_roi(roi_result, video_path: str = None) -> dict:
 
     if hrv_result is not None:
         try:
-            from src.stress_classifier import classify_stress_ml as classify_stress ##
+            from src.stress_classifier import classify_stress_ml as classify_stress  ##
             stress_level, stress_confidence, stress_warnings = classify_stress(hrv_result)
             warnings.extend(stress_warnings)
         except ImportError:
