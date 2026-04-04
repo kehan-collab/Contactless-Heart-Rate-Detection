@@ -86,7 +86,7 @@ def health_check():
 # Pipeline orchestration
 # ---------------------------------------------------------------------------
 
-def _run_analysis_on_roi(roi_result) -> dict:
+def _run_analysis_on_roi(roi_result, video_path: str = None) -> dict:
     """Run signal processing, HRV, and stress stages on an existing ROIResult.
 
     Shared by both the batch /api/analyze and live /api/live endpoints.
@@ -112,22 +112,51 @@ def _run_analysis_on_roi(roi_result) -> dict:
             warnings=[f"Signal processing failed: {e}"],
         )
 
-    # --- Stage 3: SQI gate ---
+    # --- Stage 3: SQI gate + Triage Decision Agent ---
+    # TWIST 1: When SQI is LOW, switch to Visual Assessment Mode
     if signal_result.sqi_level == "LOW":
+        if video_path is not None:
+            logger.info("SQI is LOW — Triage Decision Agent switching to Visual Assessment Mode")
+            try:
+                from src.visual_assessor import assess_visual_distress
+                visual = assess_visual_distress(video_path)
+            except Exception as e:
+                logger.error("Visual assessment failed: %s", e)
+                visual = {
+                    "visual_stress_score": 0.5,
+                    "visual_stress_level": "UNKNOWN",
+                    "pallor": {"pallor_score": 0.5, "detail": "Assessment unavailable"},
+                    "breathing": {"breathing_rate": None, "breathing_score": 0.5, "detail": "Assessment unavailable"},
+                    "motion": {"motion_score": 0.5, "detail": "Assessment unavailable"},
+                    "details": [f"Visual assessment error: {e}"],
+                }
+        else:
+            logger.info("SQI is LOW but no video file available — skipping Visual Assessment Mode")
+            visual = {
+                "visual_stress_score": 0.5,
+                "visual_stress_level": "UNKNOWN",
+                "pallor": {"pallor_score": 0.5, "detail": "Live mode - assessment unavailable"},
+                "breathing": {"breathing_rate": None, "breathing_score": 0.5, "detail": "Live mode - assessment unavailable"},
+                "motion": {"motion_score": 0.5, "detail": "Live mode - assessment unavailable"},
+                "details": ["Visual assessment not available in live mode"],
+            }
+
         return {
             "bpm": None,
             "sqi_score": signal_result.sqi_score,
             "sqi_level": signal_result.sqi_level,
             "per_roi_sqi": signal_result.per_roi_sqi,
-            "bvp_waveform": signal_result.bvp_signal[:500] if hasattr(signal_result, 'bvp_signal') else [],
+            "bvp_waveform": signal_result.bvp_signal[:500],
             "hrv": None,
-            "stress_level": "UNKNOWN",
-            "stress_confidence": 0.0,
+            "stress_level": visual["visual_stress_level"],
+            "stress_confidence": visual["visual_stress_score"],
+            "active_mode": "visual_assessment",
+            "mode_reason": "rPPG signal quality below confidence threshold — switched to visual analysis",
+            "visual_assessment": visual,
             "warnings": [
-                "Signal quality insufficient for reliable measurement.",
-                "Ensure adequate lighting and remain still during recording.",
-            ],
-            "is_final": True,
+                "Biometric mode unavailable — signal quality too low.",
+                "Visual Assessment Mode activated: analyzing physical distress indicators.",
+            ] + visual.get("details", []),
         }
 
     # --- Stage 4: HRV analysis ---
@@ -186,6 +215,9 @@ def _run_analysis_on_roi(roi_result) -> dict:
         "hrv": hrv_dict,
         "stress_level": stress_level,
         "stress_confidence": stress_confidence,
+        "active_mode": "biometric",
+        "mode_reason": "rPPG signal quality sufficient for biometric analysis",
+        "visual_assessment": None,
         "warnings": warnings,
         "is_final": True,
     }
@@ -212,7 +244,7 @@ def run_pipeline(video_path: str) -> dict:
             error_detail=str(e),
         )
 
-    return _run_analysis_on_roi(roi_result)
+    return _run_analysis_on_roi(roi_result, video_path)
 
 
 def _error_response(warnings: list, error_detail: str = None) -> dict:
@@ -339,6 +371,162 @@ async def analyze_video(video: UploadFile = File(...)):
 
 
 # ---------------------------------------------------------------------------
+# POST /api/analyze/finger -- finger PPG endpoint
+# ---------------------------------------------------------------------------
+
+def run_finger_pipeline(video_path: str) -> dict:
+    """Process a finger-on-flashlight video for PPG analysis.
+
+    Instead of face ROI extraction, this reads the mean red channel
+    intensity per frame. The flashlight illuminates the finger, and
+    blood flow modulates the red light — giving a strong PPG signal.
+    """
+    import cv2
+    import numpy as np
+
+    warnings = []
+
+    # --- Stage 1: Extract red channel from video ---
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        return _error_response(warnings=["Could not open video file."])
+
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    red_signal = []
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        # Mean of red channel (BGR format, index 2 = Red)
+        red_signal.append(float(np.mean(frame[:, :, 2])))
+
+    cap.release()
+
+    if len(red_signal) < int(fps * 3):
+        return _error_response(
+            warnings=["Video too short for finger PPG analysis. Need at least 3 seconds."]
+        )
+
+    red = np.array(red_signal, dtype=np.float64)
+    logger.info("Finger PPG: %d frames at %.1f fps", len(red), fps)
+
+    # --- Stage 2: Signal processing ---
+    try:
+        from scipy.signal import detrend
+
+        from src.signal_processor import bandpass_filter, detect_peaks, extract_bpm
+
+        # Detrend and bandpass filter
+        # Finger PPG has much stronger signal → use tighter band (48-150 BPM)
+        red_detrended = detrend(red, type='linear')
+        red_filtered = bandpass_filter(red_detrended, fps, low=0.8, high=2.5)
+
+        # BPM via FFT
+        bpm = extract_bpm(red_filtered, fps)
+
+        # Peak detection
+        peaks = detect_peaks(red_filtered, fps)
+
+        # SQI estimate: finger PPG is typically high quality
+        from src.sqi_engine import compute_sqi
+        sqi_score, sqi_level, _ = compute_sqi(red_filtered, fps)
+
+    except Exception as e:
+        logger.error("Finger signal processing failed: %s", e)
+        return _error_response(warnings=[f"Signal processing failed: {e}"])
+
+    # --- Stage 3: HRV analysis ---
+    hrv_result = None
+    try:
+        from src.hrv_analyzer import compute_hrv
+        hrv_result = compute_hrv(peaks, fps)
+    except Exception as e:
+        logger.error("Finger HRV analysis failed: %s", e)
+        warnings.append(f"HRV analysis failed: {e}")
+
+    if hrv_result is None and not any("HRV" in w for w in warnings):
+        warnings.append("Insufficient peaks detected for HRV analysis.")
+
+    # --- Stage 4: Stress classification ---
+    stress_level = "UNKNOWN"
+    stress_confidence = 0.0
+    if hrv_result is not None:
+        try:
+            from src.stress_classifier import classify_stress
+            stress_level, stress_confidence, stress_warnings = classify_stress(hrv_result)
+            warnings.extend(stress_warnings)
+        except Exception as e:
+            logger.error("Stress classification failed: %s", e)
+            warnings.append(f"Stress classification failed: {e}")
+
+    # --- Build response ---
+    hrv_dict = None
+    if hrv_result is not None:
+        hrv_dict = {
+            "rmssd": hrv_result.rmssd,
+            "sdnn": hrv_result.sdnn,
+            "pnn50": hrv_result.pnn50,
+            "lf_hf_ratio": hrv_result.lf_hf_ratio,
+            "mean_hr": hrv_result.mean_hr,
+            "ibi_ms": hrv_result.ibi_ms,
+        }
+
+    return {
+        "bpm": round(hrv_result.mean_hr, 1) if hrv_result else bpm,
+        "sqi_score": sqi_score,
+        "sqi_level": sqi_level,
+        "per_roi_sqi": [sqi_score],
+        "bvp_waveform": red_filtered[:500].tolist(),
+        "hrv": hrv_dict,
+        "stress_level": stress_level,
+        "stress_confidence": stress_confidence,
+        "active_mode": "biometric",
+        "mode_reason": "Finger PPG — direct contact provides strong signal",
+        "visual_assessment": None,
+        "warnings": warnings,
+    }
+
+
+@app.post("/api/analyze/finger")
+async def analyze_finger(video: UploadFile = File(...)):
+    """Analyze pulse from finger-on-flashlight video.
+
+    The user places their finger on the camera+flashlight. The red channel
+    intensity oscillates with each heartbeat, giving a strong PPG signal.
+    """
+    if video.filename is None:
+        raise HTTPException(status_code=422, detail="No filename provided.")
+
+    ext = Path(video.filename).suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=422,
+            detail=f"Unsupported: '{ext}'. Accepted: {', '.join(sorted(ALLOWED_EXTENSIONS))}")
+
+    content = await video.read()
+    if len(content) == 0:
+        raise HTTPException(status_code=422, detail="Uploaded file is empty.")
+    if len(content) > MAX_FILE_SIZE_BYTES:
+        raise HTTPException(status_code=422,
+            detail=f"File too large ({len(content)/1024/1024:.1f}MB). Max: {MAX_FILE_SIZE_BYTES/1024/1024:.0f}MB.")
+
+    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        start_time = time.time()
+        result = run_finger_pipeline(tmp_path)
+        elapsed_ms = (time.time() - start_time) * 1000
+        result["processing_time_ms"] = round(elapsed_ms, 1)
+        logger.info("Finger analysis: bpm=%s, time=%.0fms",
+                     result.get("bpm"), elapsed_ms)
+        return JSONResponse(content=result)
+    except Exception as e:
+        logger.exception("Finger analysis failed")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {e}")
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
 # WebSocket /api/live -- live webcam frame streaming
 # ---------------------------------------------------------------------------
 
@@ -478,7 +666,7 @@ async def live_video_endpoint(websocket: WebSocket):
                     roi_res = _build_live_roi(
                         green_buffers, rgb_buffers, fps_estimate, frame_count
                     )
-                    intermediate = _run_analysis_on_roi(roi_res)
+                    intermediate = _run_analysis_on_roi(roi_res, None)
                     intermediate["is_final"] = False
                     await websocket.send_json(intermediate)
                     last_intermediate_at = frame_count
@@ -497,7 +685,7 @@ async def live_video_endpoint(websocket: WebSocket):
             roi_res = _build_live_roi(
                 green_buffers, rgb_buffers, fps_estimate, frame_count
             )
-            final = _run_analysis_on_roi(roi_res)
+            final = _run_analysis_on_roi(roi_res, None)
             final["is_final"] = True
             await websocket.send_json(final)
             logger.info(
@@ -562,3 +750,4 @@ def _build_live_roi(green_buffers, rgb_buffers, fps, frame_count):
 _frontend_dir = Path(__file__).resolve().parent.parent.parent / "frontend"
 if _frontend_dir.is_dir():
     app.mount("/", StaticFiles(directory=str(_frontend_dir), html=True), name="frontend")
+

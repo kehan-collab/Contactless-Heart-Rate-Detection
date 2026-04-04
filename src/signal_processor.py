@@ -261,10 +261,13 @@ def extract_bpm(bvp_signal: np.ndarray, fps: float,
 def detect_peaks(bvp_signal: np.ndarray, fps: float) -> List[int]:
     """Find peaks in the BVP signal for IBI computation.
 
-    Uses SciPy's find_peaks with parameters tuned for rPPG signals:
+    Uses SciPy's find_peaks with adaptive parameters, then a second
+    pass to recover missed peaks in large gaps (improves accuracy).
 
-        - min distance: 0.4s between peaks (~150 BPM max physiological rate)
-        - prominence: 0.2 × signal std
+    Two-pass approach:
+        Pass 1: Standard find_peaks with adaptive prominence
+        Pass 2: For gaps > 1.5× median IBI, search for a local max
+                (recovers beats missed due to amplitude variation)
 
     Why 0.2 instead of 0.3?
     The live WebSocket path produces slightly noisier signals than the
@@ -286,10 +289,8 @@ def detect_peaks(bvp_signal: np.ndarray, fps: float) -> List[int]:
     if len(bvp_signal) < 3:
         return []
 
-    min_distance = int(fps * 0.4)  # minimum 0.4s between beats (~150 BPM max)
+    min_distance = int(fps * 0.4)  # minimum 0.4s between beats
     prominence = 0.2 * np.std(bvp_signal)
-
-    # Ensure minimum prominence to avoid detecting pure noise
     prominence = max(prominence, 1e-6)
 
     peaks, properties = find_peaks(
@@ -298,12 +299,35 @@ def detect_peaks(bvp_signal: np.ndarray, fps: float) -> List[int]:
         prominence=prominence,
     )
 
-    logger.debug(
-        "Detected %d peaks in %d samples (%.1f s) at fps=%.1f",
-        len(peaks), len(bvp_signal), len(bvp_signal) / fps, fps,
-    )
+    # --- Pass 2: Recover missed peaks in large gaps ---
+    if len(peaks) >= 3:
+        gaps = np.diff(peaks)
+        median_gap = np.median(gaps)
+        threshold = median_gap * 1.5
 
-    return peaks.tolist()
+        new_peaks = list(peaks)
+        for i in range(len(peaks) - 1):
+            gap = peaks[i + 1] - peaks[i]
+            if gap > threshold:
+                # Search for local max in the gap region
+                search_start = peaks[i] + int(median_gap * 0.4)
+                search_end = peaks[i + 1] - int(median_gap * 0.4)
+                if search_start < search_end:
+                    segment = bvp_signal[search_start:search_end]
+                    if len(segment) > 0:
+                        local_peak = search_start + np.argmax(segment)
+                        if bvp_signal[local_peak] > 0:  # sanity check
+                            new_peaks.append(int(local_peak))
+
+        new_peaks.sort()
+        if len(new_peaks) > len(peaks):
+            logger.debug("Pass 2 recovered %d missed peaks", len(new_peaks) - len(peaks))
+            peaks = np.array(new_peaks)
+
+    logger.debug("Detected %d peaks in %d samples (%.1f s)",
+                 len(peaks), len(bvp_signal), len(bvp_signal) / fps)
+
+    return peaks.tolist() if isinstance(peaks, np.ndarray) else list(peaks)
 
 
 # ---------------------------------------------------------------------------
